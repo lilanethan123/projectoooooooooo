@@ -30,6 +30,11 @@ body {
     color: var(--color-text);
     overflow-x: hidden;
     line-height: 1.6;
+    cursor: none;
+}
+
+body * {
+    cursor: none !important;
 }
 
 .progress-bar {
