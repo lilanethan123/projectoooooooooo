@@ -1,42 +1,33 @@
-class SmoothScroll {
-    constructor() {
-        this.current = 0;
-        this.target = 0;
-        this.ease = 0.075;
-        this.rafId = null;
-        this.isEnabled = true;
-    }
+const lenis = new Lenis({
+    duration: 1.2,
+    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    orientation: 'vertical',
+    gestureOrientation: 'vertical',
+    smoothWheel: true,
+    wheelMultiplier: 1,
+    touchMultiplier: 2,
+    infinite: false,
+});
 
-    init() {
-        document.body.style.height = document.documentElement.scrollHeight + 'px';
-        this.update();
-        window.addEventListener('scroll', () => {
-            this.target = window.scrollY;
-        }, { passive: true });
-    }
-
-    lerp(start, end, factor) {
-        return start + (end - start) * factor;
-    }
-
-    update() {
-        if (!this.isEnabled) return;
-        
-        this.current = this.lerp(this.current, this.target, this.ease);
-        
-        if (Math.abs(this.current - this.target) < 0.1) {
-            this.current = this.target;
-        }
-
-        this.rafId = requestAnimationFrame(() => this.update());
-    }
-
-    destroy() {
-        if (this.rafId) {
-            cancelAnimationFrame(this.rafId);
-        }
-    }
+function raf(time) {
+    lenis.raf(time);
+    requestAnimationFrame(raf);
 }
+
+requestAnimationFrame(raf);
+
+lenis.on('scroll', ({ scroll, limit, velocity, direction, progress }) => {
+    const progressBar = document.querySelector('.progress-bar');
+    const timelineProgress = document.querySelector('.timeline-progress');
+    
+    if (progressBar) {
+        progressBar.style.width = `${progress * 100}%`;
+    }
+    
+    if (timelineProgress) {
+        timelineProgress.style.height = `${progress * 100}%`;
+    }
+});
 
 class ScrollAnimations {
     constructor() {
@@ -50,10 +41,15 @@ class ScrollAnimations {
 
     init() {
         this.setupIntersectionObserver();
-        this.setupScrollProgress();
         this.setupParallax();
         this.setupCounters();
-        window.addEventListener('scroll', () => this.onScroll(), { passive: true });
+        this.setupYearUpdater();
+    }
+
+    setupYearUpdater() {
+        lenis.on('scroll', ({ scroll }) => {
+            this.updateCurrentYear(scroll);
+        });
     }
 
     setupIntersectionObserver() {
@@ -88,26 +84,6 @@ class ScrollAnimations {
         animatedElements.forEach(el => observer.observe(el));
     }
 
-    setupScrollProgress() {
-        this.onScroll();
-    }
-
-    onScroll() {
-        const scrollTop = window.scrollY;
-        const docHeight = document.documentElement.scrollHeight - window.innerHeight;
-        const scrollPercent = (scrollTop / docHeight) * 100;
-
-        if (this.progressBar) {
-            this.progressBar.style.width = `${scrollPercent}%`;
-        }
-
-        if (this.timelineProgress) {
-            this.timelineProgress.style.height = `${scrollPercent}%`;
-        }
-
-        this.updateCurrentYear(scrollTop);
-    }
-
     updateCurrentYear(scrollTop) {
         if (!this.yearDisplay || !this.sections.length) return;
 
@@ -135,20 +111,18 @@ class ScrollAnimations {
     setupParallax() {
         const parallaxElements = document.querySelectorAll('.full-image-bg, .hero-bg');
         
-        window.addEventListener('scroll', () => {
-            const scrollTop = window.scrollY;
-            
+        lenis.on('scroll', ({ scroll }) => {
             parallaxElements.forEach(el => {
                 const rect = el.getBoundingClientRect();
                 const parentRect = el.parentElement.getBoundingClientRect();
                 
                 if (parentRect.top < window.innerHeight && parentRect.bottom > 0) {
                     const speed = 0.3;
-                    const yPos = (scrollTop - el.parentElement.offsetTop) * speed;
+                    const yPos = (scroll - el.parentElement.offsetTop) * speed;
                     el.style.transform = `translateY(${yPos}px) scale(1.1)`;
                 }
             });
-        }, { passive: true });
+        });
     }
 
     setupCounters() {
@@ -322,48 +296,6 @@ class MagneticButtons {
     }
 }
 
-class TextReveal {
-    constructor() {
-        this.init();
-    }
-
-    init() {
-        const titles = document.querySelectorAll('.era-title, .section-title, .finale-title');
-        
-        titles.forEach(title => {
-            const text = title.textContent;
-            title.innerHTML = '';
-            
-            text.split('').forEach((char, index) => {
-                const span = document.createElement('span');
-                span.textContent = char === ' ' ? '\u00A0' : char;
-                span.style.cssText = `
-                    display: inline-block;
-                    opacity: 0;
-                    transform: translateY(20px);
-                    transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-                    transition-delay: ${index * 0.02}s;
-                `;
-                title.appendChild(span);
-            });
-        });
-
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting) {
-                    const chars = entry.target.querySelectorAll('span');
-                    chars.forEach(char => {
-                        char.style.opacity = '1';
-                        char.style.transform = 'translateY(0)';
-                    });
-                }
-            });
-        }, { threshold: 0.5 });
-
-        titles.forEach(title => observer.observe(title));
-    }
-}
-
 class ImageLoader {
     constructor() {
         this.images = document.querySelectorAll('.era-image img');
@@ -397,9 +329,10 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const target = document.querySelector(this.getAttribute('href'));
             if (target) {
-                target.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
+                lenis.scrollTo(target, {
+                    offset: 0,
+                    duration: 1.5,
+                    easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t))
                 });
             }
         });
@@ -416,6 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('%c PORSCHE LEGACY ', 'background: #f5c518; color: #0a0a0a; font-size: 24px; font-weight: bold; padding: 10px 20px;');
     console.log('%c The Evolution of Cars: 1870-2025 ', 'color: #888; font-size: 12px;');
+    console.log('%c Smooth Scrolling powered by Lenis ', 'color: #f5c518; font-size: 10px;');
 });
 
 window.addEventListener('load', () => {
